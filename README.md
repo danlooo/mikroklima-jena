@@ -1,6 +1,6 @@
 # mikroklima-jena
 
-Shiny App zur Visualisierung des Mikroklimas im Jenaer Stadtforst auf http://mikroklima.danlooo.de/
+Shiny App zur Visualisierung des Mikroklimas im Jenaer Stadtforst
 
 https://hub.docker.com/repository/docker/danlooo/mikroklima_jena/general
 
