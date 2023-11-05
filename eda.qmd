@@ -1,0 +1,144 @@
+---
+title: "EDA: Jena micro climate"
+author: "Daniel Loos"
+format: html
+editor: visual
+---
+
+## Objective
+
+What do wqe want to present at the Naturerlebniszentrum as an interactive chart?
+
+## Load data
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggpubr)
+library(leaflet)
+
+theme_set(theme_classic())
+
+sites <- read_csv("data/sites.csv")
+load("data/15_data.all.2022.RData")
+observations <- data.all
+
+observations_daily <- 
+  data.all |>
+  mutate(date.time = date.time |> date() |> as_datetime()) |>
+  group_by(WZE_ID, date.time) |>
+  summarise(across(starts_with("T"), partial(mean, na.rm = TRUE))) |>
+  left_join(sites)
+```
+
+## Seasonal impacts
+
+```{r}
+observations_daily |>
+  left_join(sites) |>
+  filter(! is.na(T.air_150_cm)) |>
+  ggplot(aes(date.time, elevation)) +
+    geom_point(aes(color = T.air_150_cm), size = 3) +
+    scale_color_viridis_c(option = "A") +
+    labs(
+      x = "Zeit", y = "Höhe über NN [m]",
+      color = "Lufttemperatur im Tagesmittel\nin 1.5m Höhe [°C]"
+    )
+```
+
+-   no clear pattern
+
+-   little differences in height
+
+-   sites are grouped in 3 elevation groups
+
+```{r}
+observations_daily |>
+  ggplot(aes(T.air_150_cm, elevation)) +
+    geom_point() +
+    stat_cor()
+```
+
+no direct correlation between air temperature and elevation
+
+```{r}
+leaflet(data = sites) |>
+  addTiles() |>
+  addMarkers(
+    ~Longitude_WGS84_E, ~Latitude_WGS84_N,
+    label = ~ str_glue("{WZE_ID}, {elevation}")
+    )
+```
+
+Lets take 2 close sites at different elevations:
+
+```{r}
+observations_daily |>
+  filter(WZE_ID %in% c("KM1", "K2")) |>
+  ggplot(aes(date.time, T.air_150_cm, color = WZE_ID)) +
+    geom_line()
+```
+
+```{r}
+observations_daily |>
+  ggplot(aes(date.time, T.air_150_cm, color = elevation)) +
+    geom_line() +
+    scale_color_viridis_c()
+```
+
+-   no big seasonal change
+
+## Within day changes
+
+```{r}
+observations <- data.all
+```
+
+```{r}
+observations |>
+  filter(as_date(date.time) == as.Date("2022-10-01")) |>
+  ggplot(aes(date.time, T.air_150_cm, color = elevation, group = WZE_ID)) +
+    geom_line() +
+    scale_color_viridis_c()
+```
+
+-   there is sub daily signal: lower sites have more extreme temperatures
+
+```{r}
+temp_stats <-
+  observations |>
+  mutate(date = floor_date(date.time, "day")) |>
+  group_by(WZE_ID, date) |>
+  summarise(
+    min_temp = min(T.air_150_cm),
+    max_temp = max(T.air_150_cm),
+    temp_span = max_temp - min_temp
+  ) |>
+  left_join(sites) |>
+  # mutate(elevation_group = cut(elevation, seq(min(elevation), max(elevation), 5)))
+  mutate(elevation_group = case_when(
+    elevation > 320 ~ "Berg",
+    TRUE ~ "Tal"
+  ))
+
+temp_stats_groups <-
+  temp_stats |>
+  group_by(date, elevation_group) |>
+  summarise(temp_span = mean(temp_span, na.rm = TRUE))
+
+temp_stats |>
+  filter(WZE_ID == "EH2") |>
+  ggplot(aes(date, temp_span, fill = elevation_group)) +
+    stat_smooth(data = temp_stats_groups, method = "loess", color = NA) +
+    geom_point(size = 0.5) +
+    stat_smooth(method = "loess", color = "black", se = FALSE) +
+    scale_color_manual(values = c(Berg = "#283618", Tal = "#b5838d")) +
+    scale_fill_manual(values = c(Berg = "#283618", Tal = "#b5838d")) +
+    guides(col = "none") +
+    labs(
+      title = "Extreme Temperaturen im Tal",
+      x = "Zeit [Tag]",
+      y = "Temperaturspanne im Tagesverlauf [°C]",
+      fill = "Höhe"
+    )
+```

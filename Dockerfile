@@ -1,4 +1,4 @@
-FROM rocker/r-base:latest
+FROM rocker/shiny:latest
 LABEL maintainer="Daniel Loos"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
@@ -8,13 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     libssh2-1-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN install.r shiny
-RUN echo "local(options(shiny.port = 3838, shiny.host = '0.0.0.0'))" > /usr/lib/R/etc/Rprofile.site
+
+WORKDIR /app
+COPY ./install.R ./install.R
+RUN Rscript install.R
+
+COPY *.R ./
+COPY data.RData ./
 RUN addgroup --system app \
     && adduser --system --ingroup app app
-WORKDIR /home/app
-COPY app .
-RUN chown app:app -R /home/app
+RUN chown app:app -R /app
 USER app
-EXPOSE 3838
-CMD ["R", "-e", "shiny::runApp('/home/app')"]
+EXPOSE 80
+CMD ["R", "-e", "shiny::runApp('/app', port = 80, host = '0.0.0.0')"]
